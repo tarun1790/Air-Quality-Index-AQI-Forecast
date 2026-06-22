@@ -1,0 +1,16 @@
+# Netlify Configuration File
+[build]
+  # Base directory where frontend code is located
+  base = "frontend"
+  
+  # Command to compile the Vite TypeScript application
+  command = "npm run build"
+  
+  # Directory that Netlify will serve publicly
+  publish = "dist"
+
+# Single Page Application (SPA) routing fallback redirection
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
