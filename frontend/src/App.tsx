@@ -6,6 +6,8 @@ import { PrecautionsCard } from './components/PrecautionsCard';
 import { ForecastChart } from './components/ForecastChart';
 import { CityCompare } from './components/CityCompare';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 interface PollutantData {
   value: number;
   who_limit: number;
@@ -138,7 +140,7 @@ function App() {
       setError(null);
       try {
         const response = await fetch(
-          `http://localhost:8000/api/air-quality?lat=${coords.lat}&lon=${coords.lon}`
+          `${API_BASE_URL}/api/air-quality?lat=${coords.lat}&lon=${coords.lon}`
         );
         if (!response.ok) {
           throw new Error('Failed to retrieve air quality calculations from backend');
@@ -172,7 +174,7 @@ function App() {
           .map((item) => `${item.lat},${item.lon},${item.name}`)
           .join('|');
         const response = await fetch(
-          `http://localhost:8000/api/compare-cities?coords=${encodeURIComponent(coordsQuery)}`
+          `${API_BASE_URL}/api/compare-cities?coords=${encodeURIComponent(coordsQuery)}`
         );
         if (response.ok) {
           const data = await response.json();
@@ -197,7 +199,7 @@ function App() {
     const delayDebounce = setTimeout(async () => {
       try {
         const response = await fetch(
-          `http://localhost:8000/api/search-cities?query=${encodeURIComponent(searchQuery)}`
+          `${API_BASE_URL}/api/search-cities?query=${encodeURIComponent(searchQuery)}`
         );
         if (response.ok) {
           const data = await response.json();

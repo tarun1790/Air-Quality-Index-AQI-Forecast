@@ -44,7 +44,8 @@ export const CityCompare: React.FC<CityCompareProps> = ({ cities, onRemoveCity, 
     const delayDebounce = setTimeout(async () => {
       setLoadingSearch(true);
       try {
-        const response = await fetch(`http://localhost:8000/api/search-cities?query=${encodeURIComponent(searchQuery)}`);
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/search-cities?query=${encodeURIComponent(searchQuery)}`);
         if (response.ok) {
           const data = await response.json();
           setSearchResults(data);
