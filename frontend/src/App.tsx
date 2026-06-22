@@ -236,8 +236,8 @@ function App() {
       <header className="dashboard-header">
         <div className="title-section">
           <h1>
-            <Wind size={32} style={{ color: '#06b6d4' }} />
-            AeroCast
+            <Wind size={32} style={{ color: '#8b5cf6' }} />
+            Purple AQI Forecast
           </h1>
           <p>Local AI-Powered Air Quality Forecasting & Health Diagnostics</p>
         </div>
