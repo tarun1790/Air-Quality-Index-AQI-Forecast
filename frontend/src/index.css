@@ -640,3 +640,122 @@ body {
   height: 9px;
   border-radius: 50%;
 }
+
+/* Hero Landing Section */
+.hero-section {
+  height: 100vh;
+  width: 100%;
+  background: #000000; /* Pure black background */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.hero-section::before {
+  content: '';
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.12) 0%, transparent 70%);
+  filter: blur(50px);
+  pointer-events: none;
+}
+
+.hero-content {
+  text-align: center;
+  z-index: 10;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.hero-title {
+  font-size: clamp(2.2rem, 7vw, 4.8rem);
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.6em; /* Letters gap */
+  margin-left: 0.6em; /* Offset to keep text centered */
+  text-shadow: 0 0 30px rgba(168, 85, 247, 0.35);
+  background: linear-gradient(135deg, #ffffff 30%, #e8d5ff 70%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.hero-subtitle {
+  font-size: clamp(0.7rem, 2vw, 0.95rem);
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.4em; /* Letters gap */
+  margin-left: 0.4em;
+  text-transform: uppercase;
+  max-width: 700px;
+  line-height: 1.8;
+  margin-top: 0.5rem;
+}
+
+.hero-scroll-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 5rem;
+  transition: all 0.3s;
+  outline: none;
+}
+
+.hero-scroll-btn:hover {
+  color: var(--neon-purple);
+}
+
+.mouse-indicator {
+  width: 24px;
+  height: 40px;
+  border: 2px solid var(--text-muted);
+  border-radius: 999px;
+  position: relative;
+  transition: border-color 0.3s;
+}
+
+.hero-scroll-btn:hover .mouse-indicator {
+  border-color: var(--neon-purple);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+}
+
+.wheel {
+  width: 4px;
+  height: 8px;
+  background-color: var(--text-muted);
+  border-radius: 999px;
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  animation: scrollWheel 1.6s ease-out infinite;
+}
+
+.hero-scroll-btn:hover .wheel {
+  background-color: var(--neon-purple);
+}
+
+@keyframes scrollWheel {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+}

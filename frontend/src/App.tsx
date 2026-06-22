@@ -31,6 +31,7 @@ interface AQIDetails {
 interface AirQualityData {
   latitude: number;
   longitude: number;
+  resolved_address: string | null;
   timezone: string;
   elevation: number;
   current: {
@@ -144,6 +145,9 @@ function App() {
         }
         const data: AirQualityData = await response.json();
         setAqData(data);
+        if (data.resolved_address) {
+          setCityName(data.resolved_address);
+        }
       } catch (err: any) {
         console.error('Fetch error:', err);
         setError(err.message || 'Could not load AQI data. Make sure backend is running.');
@@ -230,125 +234,151 @@ function App() {
     setComparedCoordsList(comparedCoordsList.filter((item) => item.name !== name));
   };
 
+  const scrollToDashboard = () => {
+    const element = document.getElementById('dashboard');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
-    <div className="dashboard-container">
-      {/* Header section */}
-      <header className="dashboard-header">
-        <div className="title-section">
-          <h1>
-            <Wind size={32} style={{ color: '#8b5cf6' }} />
-            Purple AQI Forecast
-          </h1>
-          <p>Local AI-Powered Air Quality Forecasting & Health Diagnostics</p>
-        </div>
-
-        <div className="search-and-gps">
-          {/* Main search bar */}
-          <div className="search-wrapper">
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search major city..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => searchQuery.trim().length >= 3 && setShowSearchDropdown(true)}
-            />
-            <Search size={18} className="search-icon-svg" />
-            
-            {showSearchDropdown && searchResults.length > 0 && (
-              <div className="search-results">
-                {searchResults.map((result, idx) => (
-                  <button
-                    key={idx}
-                    className="search-item"
-                    onClick={() => handleSelectMainCity(result)}
-                  >
-                    {result.name}
-                    <span>{result.admin1 ? `${result.admin1}, ` : ''}{result.country}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* GPS Button */}
-          <button className="btn-gps" onClick={getGPSLocation}>
-            <Navigation size={16} />
-            Use GPS
+    <div style={{ backgroundColor: '#000000', minHeight: '100vh', width: '100%' }}>
+      {/* Cinematic Full screen black background Hero Page */}
+      <section className="hero-section">
+        <div className="hero-content">
+          <h1 className="hero-title">Purple AQI Forecast</h1>
+          <p className="hero-subtitle">
+            Local AI-Powered Air Quality Forecasting & Health Diagnostics
+          </p>
+          <button className="hero-scroll-btn" onClick={scrollToDashboard}>
+            <div className="mouse-indicator">
+              <div className="wheel"></div>
+            </div>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.2em' }}>SCROLL DOWN</span>
           </button>
         </div>
-      </header>
+      </section>
 
-      {/* Main dashboard contents */}
-      {loading ? (
-        <div className="loader-container glass-panel">
-          <div className="spinner" />
-          <div className="loading-text">Loading forecasts...</div>
-          <div className="loading-status">{statusText}</div>
-        </div>
-      ) : error ? (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-          <AlertTriangle size={48} style={{ color: '#ef4444', marginBottom: '1rem' }} />
-          <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>Failed to Fetch AQI Data</h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{error}</p>
-          <button className="btn-gps" onClick={() => setCoords({ ...coords! })}>
-            Retry Loading
-          </button>
-        </div>
-      ) : aqData ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Subheader: Active Location Detail */}
-          <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.5rem', background: 'rgba(56, 189, 248, 0.03)' }}>
-            <MapPin size={18} style={{ color: '#06b6d4' }} />
-            <div>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Viewing reports for:</span>
-              <strong style={{ marginLeft: '0.5rem', fontSize: '1rem', color: 'white' }}>{cityName}</strong>
-              <span style={{ marginLeft: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                ({aqData.latitude.toFixed(4)}°N, {aqData.longitude.toFixed(4)}°E)
-              </span>
-            </div>
+      {/* Main dashboard view container */}
+      <div id="dashboard" className="dashboard-container">
+        {/* Header section */}
+        <header className="dashboard-header">
+          <div className="title-section">
+            <h1>
+              <Wind size={32} style={{ color: '#8b5cf6' }} />
+              Purple AQI Forecast
+            </h1>
+            <p>Local AI-Powered Air Quality Forecasting & Health Diagnostics</p>
           </div>
 
-          <div className="main-grid">
-            {/* Left Column: Current AQI Gauge */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <AQIGauge aqi={aqData.current.aqi} />
-            </div>
-
-            {/* Right Column: Detailed Breakdown & Charts */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              {/* Pollutants grid */}
-              <div className="pollutants-container">
-                <div className="pollutants-header">
-                  <h3>Pollutant Breakdown</h3>
-                </div>
-                <div className="pollutants-grid">
-                  {Object.entries(aqData.current.pollutants).map(([key, data]) => (
-                    <PollutantCard key={key} pollutantKey={key} data={data} />
+          <div className="search-and-gps">
+            {/* Main search bar */}
+            <div className="search-wrapper">
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search major city..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => searchQuery.trim().length >= 3 && setShowSearchDropdown(true)}
+              />
+              <Search size={18} className="search-icon-svg" />
+              
+              {showSearchDropdown && searchResults.length > 0 && (
+                <div className="search-results">
+                  {searchResults.map((result, idx) => (
+                    <button
+                      key={idx}
+                      className="search-item"
+                      onClick={() => handleSelectMainCity(result)}
+                    >
+                      {result.name}
+                      <span>{result.admin1 ? `${result.admin1}, ` : ''}{result.country}</span>
+                    </button>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* GPS Button */}
+            <button className="btn-gps" onClick={getGPSLocation}>
+              <Navigation size={16} />
+              Use GPS
+            </button>
+          </div>
+        </header>
+
+        {/* Main dashboard contents */}
+        {loading ? (
+          <div className="loader-container glass-panel">
+            <div className="spinner" />
+            <div className="loading-text">Loading forecasts...</div>
+            <div className="loading-status">{statusText}</div>
+          </div>
+        ) : error ? (
+          <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+            <AlertTriangle size={48} style={{ color: '#ef4444', marginBottom: '1rem' }} />
+            <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>Failed to Fetch AQI Data</h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{error}</p>
+            <button className="btn-gps" onClick={() => setCoords({ ...coords! })}>
+              Retry Loading
+            </button>
+          </div>
+        ) : aqData ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {/* Subheader: Active Location Detail */}
+            <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem 1.5rem', background: 'rgba(56, 189, 248, 0.03)' }}>
+              <MapPin size={18} style={{ color: '#06b6d4' }} />
+              <div>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Viewing reports for:</span>
+                <strong style={{ marginLeft: '0.5rem', fontSize: '1rem', color: 'white' }}>{cityName}</strong>
+                <span style={{ marginLeft: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  ({aqData.latitude.toFixed(4)}°N, {aqData.longitude.toFixed(4)}°E)
+                </span>
+              </div>
+            </div>
+
+            <div className="main-grid">
+              {/* Left Column: Current AQI Gauge */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <AQIGauge aqi={aqData.current.aqi} />
               </div>
 
-              {/* Health precautions */}
-              <PrecautionsCard precautions={aqData.current.aqi.precautions} />
+              {/* Right Column: Detailed Breakdown & Charts */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {/* Pollutants grid */}
+                <div className="pollutants-container">
+                  <div className="pollutants-header">
+                    <h3>Pollutant Breakdown</h3>
+                  </div>
+                  <div className="pollutants-grid">
+                    {Object.entries(aqData.current.pollutants).map(([key, data]) => (
+                      <PollutantCard key={key} pollutantKey={key} data={data} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Health precautions */}
+                <PrecautionsCard precautions={aqData.current.aqi.precautions} />
+              </div>
+            </div>
+
+            {/* Bottom Analytics: Chart Comparison */}
+            <div className="charts-grid">
+              <ForecastChart
+                historyData={aqData.history_trend}
+                forecastData={aqData.forecast_comparison}
+              />
+              {/* City comparisons */}
+              <CityCompare
+                cities={comparedCities}
+                onRemoveCity={handleRemoveCompareCity}
+                onAddCity={handleAddCompareCity}
+              />
             </div>
           </div>
-
-          {/* Bottom Analytics: Chart Comparison */}
-          <div className="charts-grid">
-            <ForecastChart
-              historyData={aqData.history_trend}
-              forecastData={aqData.forecast_comparison}
-            />
-            {/* City comparisons */}
-            <CityCompare
-              cities={comparedCities}
-              onRemoveCity={handleRemoveCompareCity}
-              onAddCity={handleAddCompareCity}
-            />
-          </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }

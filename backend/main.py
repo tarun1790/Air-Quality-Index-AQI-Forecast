@@ -17,6 +17,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def reverse_geocode(lat: float, lon: float) -> str:
+    """
+    Calls OpenStreetMap Nominatim reverse geocoding to resolve GPS coords to town/suburb/city name.
+    """
+    headers = {
+        "User-Agent": "PurpleAQIForecast/1.0 (tarun1790@github.com)"
+    }
+    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=14"
+    try:
+        response = requests.get(url, headers=headers, timeout=2.0)
+        if response.status_code == 200:
+            addr = response.json().get("address", {})
+            # Prefer town or village or city or suburb
+            name = addr.get("town") or addr.get("village") or addr.get("suburb") or addr.get("city") or addr.get("neighbourhood") or addr.get("municipality")
+            country = addr.get("country")
+            if name and country:
+                return f"{name}, {country}"
+            elif name:
+                return name
+    except Exception as e:
+        print(f"[Reverse Geocode Warning] Nominatim query failed: {e}")
+    return None
+
+
 # Constants for AQI categories and advice
 def get_aqi_details(aqi: float):
     aqi_val = int(round(aqi))
@@ -123,6 +147,9 @@ WHO_GUIDELINES = {
 
 @app.get("/api/air-quality")
 def get_air_quality(lat: float, lon: float):
+    # Call reverse geocoding to resolve nearby town/suburb name
+    resolved_addr = reverse_geocode(lat, lon)
+    
     # Call Open-Meteo Air Quality API
     url = f"https://air-quality-api.open-meteo.com/v1/air-quality"
     params = {
@@ -214,6 +241,7 @@ def get_air_quality(lat: float, lon: float):
     return {
         "latitude": lat,
         "longitude": lon,
+        "resolved_address": resolved_addr,
         "timezone": data.get("timezone", "UTC"),
         "elevation": data.get("elevation", 0),
         "current": {
