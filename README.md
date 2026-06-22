@@ -6,7 +6,7 @@ An AI-powered, high-fidelity Air Quality Index (AQI) forecasting and health diag
 
 ## Intern Project Details
 * **Intern Name**: Jampani Tarun Sai
-* **Intern ID**: CT-655
+* **Intern ID**: CITS1344
 * **Internship Duration**: 12 Weeks Internship
 
 ---
