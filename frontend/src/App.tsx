@@ -246,7 +246,10 @@ function App() {
       {/* Cinematic Full screen black background Hero Page */}
       <section className="hero-section">
         <div className="hero-content">
-          <h1 className="hero-title">Purple AQI Forecast</h1>
+          <h1 className="hero-title">
+            <span className="hero-title-top">PURPLE</span>
+            <span className="hero-title-bottom">AQI FORECAST</span>
+          </h1>
           <p className="hero-subtitle">
             Local AI-Powered Air Quality Forecasting & Health Diagnostics
           </p>
