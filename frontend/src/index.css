@@ -774,3 +774,39 @@ body {
     transform: translate(-50%, 16px);
   }
 }
+
+/* Advanced Analytics and Warning Styles */
+.metrics-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.metric-badge-card {
+  flex: 1;
+  min-width: 250px;
+  background: rgba(12, 6, 25, 0.45) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.metric-badge-card:hover {
+  transform: translateY(-2px);
+  background: rgba(168, 85, 247, 0.05) !important;
+  border-color: rgba(168, 85, 247, 0.3) !important;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.35);
+  }
+}
+
+.alert-banner {
+  animation: pulse-border 3s infinite;
+}
+

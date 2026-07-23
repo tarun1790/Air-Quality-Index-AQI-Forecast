@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Navigation, AlertTriangle, Wind, MapPin } from 'lucide-react';
+import { Search, Navigation, AlertTriangle, Wind, MapPin, Cpu, Clock, Activity } from 'lucide-react';
 import { AQIGauge } from './components/AQIGauge';
 import { PollutantCard } from './components/PollutantCard';
 import { PrecautionsCard } from './components/PrecautionsCard';
@@ -36,6 +36,9 @@ interface AirQualityData {
   resolved_address: string | null;
   timezone: string;
   elevation: number;
+  data_source: string;
+  model_execution_time_ms: number;
+  correlation_coefficient: number;
   current: {
     time: string;
     aqi: AQIDetails;
@@ -340,6 +343,70 @@ function App() {
                 <span style={{ marginLeft: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                   ({aqData.latitude.toFixed(4)}°N, {aqData.longitude.toFixed(4)}°E)
                 </span>
+              </div>
+            </div>
+
+            {/* WHO Health Alert Banner */}
+            {(() => {
+              const extremePollutants = Object.entries(aqData.current.pollutants).filter(
+                ([_, details]) => details.percentage_of_limit > 150
+              );
+              if (extremePollutants.length === 0) return null;
+              return (
+                <div className="glass-panel alert-banner" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  padding: '1rem 1.5rem',
+                  borderRadius: '16px',
+                  boxShadow: '0 0 15px rgba(239, 68, 68, 0.15)'
+                }}>
+                  <AlertTriangle size={24} style={{ color: '#ef4444', flexShrink: 0 }} />
+                  <div style={{ fontSize: '0.9rem', color: '#fca5a5', lineHeight: 1.5, textAlign: 'left' }}>
+                    <strong>Exposure Alert:</strong> {extremePollutants.map(([key, details]) => {
+                      const label = key === 'pm2_5' ? 'PM₂.₅' : key === 'pm10' ? 'PM₁₀' : key.toUpperCase().replace('_', ' ');
+                      return `${label} is ${(details.percentage_of_limit / 100).toFixed(1)}x above WHO safety limits`;
+                    }).join(', ')}. Sensitive groups should limit outdoor physical activity and wear protective N95 masks.
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Advanced Analytics Metrics Row */}
+            <div className="metrics-row">
+              {/* Compute Engine Source */}
+              <div className="metric-badge-card glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.85rem 1.25rem', textAlign: 'left' }}>
+                <Cpu size={20} style={{ color: aqData.data_source.includes('Cache') ? '#10b981' : '#8b5cf6', flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Compute Engine</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'white', textShadow: `0 0 10px ${aqData.data_source.includes('Cache') ? '#10b98122' : '#8b5cf622'}` }}>
+                    {aqData.data_source}
+                  </div>
+                </div>
+              </div>
+
+              {/* Training Latency */}
+              <div className="metric-badge-card glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.85rem 1.25rem', textAlign: 'left' }}>
+                <Clock size={20} style={{ color: '#06b6d4', flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Training Latency</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'white' }}>
+                    {aqData.model_execution_time_ms} ms
+                  </div>
+                </div>
+              </div>
+
+              {/* Correlation Statistics */}
+              <div className="metric-badge-card glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.85rem 1.25rem', textAlign: 'left' }}>
+                <Activity size={20} style={{ color: '#ec4899', flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AQI/PM2.5 Correlation</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'white' }}>
+                    r = {aqData.correlation_coefficient.toFixed(4)}
+                  </div>
+                </div>
               </div>
             </div>
 

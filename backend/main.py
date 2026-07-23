@@ -1,12 +1,13 @@
 import os
+import time
+import torch
+import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-import requests
-from datetime import datetime, timezone
 import numpy as np
 from model import train_and_forecast_aqi
 
-app = FastAPI(title="Air Quality Index (AQI) Forecast API")
+app = FastAPI(title="Purple AQI Forecast API")
 
 # Setup CORS to allow React frontend to connect
 app.add_middleware(
@@ -17,29 +18,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def reverse_geocode(lat: float, lon: float) -> str:
+# In-Memory Cache Manager
+class APICache:
+    def __init__(self, ttl_seconds=3600):
+        self.cache = {}
+        self.ttl = ttl_seconds
+        
+    def get(self, lat: float, lon: float):
+        # Round coordinates to 3 decimal places (~110m accuracy) for cache key matching
+        key = (round(lat, 3), round(lon, 3))
+        if key in self.cache:
+            val, timestamp = self.cache[key]
+            if time.time() - timestamp < self.ttl:
+                return val
+            else:
+                del self.cache[key] # Cache expired
+        return None
+        
+    def set(self, lat: float, lon: float, value: dict):
+        key = (round(lat, 3), round(lon, 3))
+        self.cache[key] = (value, time.time())
+
+# Instantiate the cache (1 hour TTL)
+api_cache = APICache(ttl_seconds=3600)
+
+async def reverse_geocode_async(lat: float, lon: float) -> str:
     """
-    Calls OpenStreetMap Nominatim reverse geocoding to resolve GPS coords to town/suburb/city name.
+    Asynchronously queries OpenStreetMap Nominatim for town/city name.
     """
     headers = {
-        "User-Agent": "PurpleAQIForecast/1.0 (tarun1790@github.com)"
+        "User-Agent": "PurpleAQIForecast/2.0 (tarun1790@github.com)"
     }
     url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&zoom=14"
     try:
-        response = requests.get(url, headers=headers, timeout=2.0)
-        if response.status_code == 200:
-            addr = response.json().get("address", {})
-            # Prefer town or village or city or suburb
-            name = addr.get("town") or addr.get("village") or addr.get("suburb") or addr.get("city") or addr.get("neighbourhood") or addr.get("municipality")
-            country = addr.get("country")
-            if name and country:
-                return f"{name}, {country}"
-            elif name:
-                return name
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers, timeout=2.0)
+            if response.status_code == 200:
+                addr = response.json().get("address", {})
+                name = addr.get("town") or addr.get("village") or addr.get("suburb") or addr.get("city") or addr.get("neighbourhood") or addr.get("municipality")
+                country = addr.get("country")
+                if name and country:
+                    return f"{name}, {country}"
+                elif name:
+                    return name
     except Exception as e:
         print(f"[Reverse Geocode Warning] Nominatim query failed: {e}")
     return None
-
 
 # Constants for AQI categories and advice
 def get_aqi_details(aqi: float):
@@ -139,18 +163,30 @@ def get_aqi_details(aqi: float):
 WHO_GUIDELINES = {
     "pm2_5": 15.0,     # µg/m³
     "pm10": 45.0,      # µg/m³
-    "carbon_monoxide": 4000.0, # µg/m³ (4 mg/m³)
+    "carbon_monoxide": 4000.0, # µg/m³
     "nitrogen_dioxide": 25.0,  # µg/m³
     "sulphur_dioxide": 40.0,   # µg/m³
     "ozone": 100.0     # µg/m³
 }
 
 @app.get("/api/air-quality")
-def get_air_quality(lat: float, lon: float):
-    # Call reverse geocoding to resolve nearby town/suburb name
-    resolved_addr = reverse_geocode(lat, lon)
+async def get_air_quality(lat: float, lon: float):
+    # 1. Check cache first
+    cached_data = api_cache.get(lat, lon)
+    if cached_data is not None:
+        # Return a copy with updated metrics to indicate cache retrieval
+        response_copy = dict(cached_data)
+        response_copy["data_source"] = "In-Memory API Cache"
+        response_copy["model_execution_time_ms"] = 0
+        return response_copy
+
+    # Cache miss - run dynamic pipeline
+    start_time = time.time()
     
-    # Call Open-Meteo Air Quality API
+    # 2. Async call reverse geocoding to resolve nearby town/suburb name
+    resolved_addr = await reverse_geocode_async(lat, lon)
+    
+    # 3. Async call Open-Meteo Air Quality API
     url = f"https://air-quality-api.open-meteo.com/v1/air-quality"
     params = {
         "latitude": lat,
@@ -162,9 +198,10 @@ def get_air_quality(lat: float, lon: float):
     }
     
     try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=5.0)
+            response.raise_for_status()
+            data = response.json()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch air quality data from Open-Meteo: {e}")
         
@@ -193,39 +230,50 @@ def get_air_quality(lat: float, lon: float):
         }
         
     # Prepare historical data for training PyTorch model (past 30 days)
-    # Open-Meteo hourly contains past 30 days + 7 days forecast.
-    # The API returns them in chronological order. We can split history vs forecast based on the current time index.
     times = hourly.get("time", [])
     us_aqi_hourly = hourly.get("us_aqi", [])
+    pm25_hourly = hourly.get("pm2_5", [])
     
     # Find current time index in hourly array
     current_time_str = current.get("time", "")
     try:
         current_idx = times.index(current_time_str)
     except ValueError:
-        # Fallback to splitting by 30 days * 24 hours
         current_idx = 30 * 24
         
-    # Historical AQI is everything up to the current index
+    # Historical data splits
     history_aqi = us_aqi_hourly[:current_idx + 1]
-    history_times = times[:current_idx + 1]
+    history_pm25 = pm25_hourly[:current_idx + 1]
     
-    # Standard Physical Forecast is the remaining hours (next 7 days, but let's grab next 24 hours for direct comparison)
+    # Standard Physical Forecast (next 24 hours)
     physical_forecast_aqi = us_aqi_hourly[current_idx + 1: current_idx + 25]
     forecast_times = times[current_idx + 1: current_idx + 25]
     
-    # Trigger PyTorch dynamic model training on CUDA
-    print(f"[API] Initializing custom PyTorch LSTM forecast model training for lat: {lat}, lon: {lon}...")
-    ai_forecast_aqi = train_and_forecast_aqi(history_aqi, forecast_length=24, input_seq_length=72, epochs=80)
+    # Calculate Pearson Correlation between AQI and PM2.5 (dynamic data statistics)
+    aqi_arr = np.array(history_aqi, dtype=np.float32)
+    pm25_arr = np.array(history_pm25, dtype=np.float32)
+    if len(aqi_arr) > 1 and len(pm25_arr) == len(aqi_arr):
+        corr_matrix = np.corrcoef(aqi_arr, pm25_arr)
+        corr_val = corr_matrix[0, 1]
+        correlation = float(corr_val) if not np.isnan(corr_val) else 0.0
+    else:
+        correlation = 0.0
+        
+    # Trigger dynamic multivariate PyTorch model training (AQI + PM2.5) on GPU
+    device_type = "GPU/CUDA" if torch.cuda.is_available() else "CPU"
+    source_name = f"Dynamic PyTorch LSTM ({device_type})"
     
-    # Format hourly trends (e.g. past 7 days for the history chart)
+    print(f"[API] Initializing custom multivariate PyTorch LSTM training on {device_type}...")
+    ai_forecast_aqi = train_and_forecast_aqi(history_aqi, history_pm25, forecast_length=24, input_seq_length=72, epochs=80)
+    
+    # Format hourly trends (past 7 days)
     past_7_days_idx = max(0, current_idx - 7 * 24)
     history_trend = []
     for idx in range(past_7_days_idx, current_idx + 1):
         history_trend.append({
             "time": times[idx],
             "us_aqi": us_aqi_hourly[idx],
-            "pm2_5": hourly.get("pm2_5", [])[idx] if hourly.get("pm2_5") else 0,
+            "pm2_5": pm25_hourly[idx] if pm25_hourly else 0,
             "pm10": hourly.get("pm10", [])[idx] if hourly.get("pm10") else 0
         })
         
@@ -238,12 +286,18 @@ def get_air_quality(lat: float, lon: float):
             "physical_aqi": physical_forecast_aqi[i]
         })
         
-    return {
+    duration_ms = int((time.time() - start_time) * 1000)
+    
+    # Create final response payload
+    payload = {
         "latitude": lat,
         "longitude": lon,
         "resolved_address": resolved_addr,
         "timezone": data.get("timezone", "UTC"),
         "elevation": data.get("elevation", 0),
+        "data_source": source_name,
+        "model_execution_time_ms": duration_ms,
+        "correlation_coefficient": round(correlation, 4),
         "current": {
             "time": current.get("time"),
             "aqi": current_aqi_details,
@@ -252,9 +306,14 @@ def get_air_quality(lat: float, lon: float):
         "forecast_comparison": comparison_forecast,
         "history_trend": history_trend
     }
+    
+    # Cache the payload
+    api_cache.set(lat, lon, payload)
+    
+    return payload
 
 @app.get("/api/search-cities")
-def search_cities(query: str = Query(..., min_length=2)):
+async def search_cities(query: str = Query(..., min_length=2)):
     url = "https://geocoding-api.open-meteo.com/v1/search"
     params = {
         "name": query,
@@ -264,9 +323,10 @@ def search_cities(query: str = Query(..., min_length=2)):
     }
     
     try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=4.0)
+            response.raise_for_status()
+            data = response.json()
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to query Geocoding API: {e}")
         
@@ -276,58 +336,55 @@ def search_cities(query: str = Query(..., min_length=2)):
         formatted_results.append({
             "name": city.get("name"),
             "country": city.get("country"),
-            "admin1": city.get("admin1"), # State / Region
+            "admin1": city.get("admin1"),
             "latitude": city.get("latitude"),
             "longitude": city.get("longitude")
         })
     return formatted_results
 
 @app.get("/api/compare-cities")
-def compare_cities(coords: str = Query(..., description="Format: lat,lon,name|lat,lon,name")):
-    """
-    Fetches the current AQI for multiple locations for side-by-side comparison.
-    """
+async def compare_cities(coords: str = Query(..., description="Format: lat,lon,name|lat,lon,name")):
     cities_data = []
     locations = coords.split("|")
     
-    for loc in locations:
-        if not loc:
-            continue
-        try:
-            lat_str, lon_str, name = loc.split(",")
-            lat, lon = float(lat_str), float(lon_str)
-        except Exception:
-            continue
+    async with httpx.AsyncClient() as client:
+        for loc in locations:
+            if not loc:
+                continue
+            try:
+                lat_str, lon_str, name = loc.split(",")
+                lat, lon = float(lat_str), float(lon_str)
+            except Exception:
+                continue
+                
+            url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+            params = {
+                "latitude": lat,
+                "longitude": lon,
+                "current": "us_aqi,pm2_5,pm10",
+                "timezone": "auto"
+            }
             
-        url = "https://air-quality-api.open-meteo.com/v1/air-quality"
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "current": "us_aqi,pm2_5,pm10",
-            "timezone": "auto"
-        }
-        
-        try:
-            response = requests.get(url, params=params)
-            if response.status_code == 200:
-                res_data = response.json()
-                current = res_data.get("current", {})
-                aqi_val = current.get("us_aqi", 0)
-                details = get_aqi_details(aqi_val)
-                cities_data.append({
-                    "name": name,
-                    "latitude": lat,
-                    "longitude": lon,
-                    "aqi": aqi_val,
-                    "category": details["category"],
-                    "color": details["color"],
-                    "assessment": details["assessment"],
-                    "pm2_5": current.get("pm2_5", 0.0),
-                    "pm10": current.get("pm10", 0.0)
-                })
-        except Exception as e:
-            # Skip cities that fail to fetch rather than crashing the whole call
-            print(f"[API Compare Error] Failed to fetch data for {name}: {e}")
-            continue
-            
+            try:
+                response = await client.get(url, params=params, timeout=4.0)
+                if response.status_code == 200:
+                    res_data = response.json()
+                    current = res_data.get("current", {})
+                    aqi_val = current.get("us_aqi", 0)
+                    details = get_aqi_details(aqi_val)
+                    cities_data.append({
+                        "name": name,
+                        "latitude": lat,
+                        "longitude": lon,
+                        "aqi": aqi_val,
+                        "category": details["category"],
+                        "color": details["color"],
+                        "assessment": details["assessment"],
+                        "pm2_5": current.get("pm2_5", 0.0),
+                        "pm10": current.get("pm10", 0.0)
+                    })
+            except Exception as e:
+                print(f"[API Compare Error] Failed to fetch data for {name}: {e}")
+                continue
+                
     return cities_data
