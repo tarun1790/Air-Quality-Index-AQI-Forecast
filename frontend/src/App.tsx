@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Navigation, AlertTriangle, Wind, MapPin, Cpu, Clock, Activity } from 'lucide-react';
+import { Search, Navigation, AlertTriangle, Wind, MapPin, Cpu, Clock, Activity, RefreshCw } from 'lucide-react';
 import { AQIGauge } from './components/AQIGauge';
 import { PollutantCard } from './components/PollutantCard';
 import { PrecautionsCard } from './components/PrecautionsCard';
@@ -244,7 +244,8 @@ function App() {
       setError(null);
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/air-quality?lat=${coords.lat}&lon=${coords.lon}`
+          `${API_BASE_URL}/api/air-quality?lat=${coords.lat}&lon=${coords.lon}&nocache=true&_t=${Date.now()}`,
+          { cache: 'no-store' }
         );
         if (!response.ok) {
           throw new Error('Failed to retrieve air quality calculations from backend');
@@ -258,8 +259,8 @@ function App() {
         console.warn('Backend fetch failed. Executing browser-side fallback logic...', err);
         try {
           setStatusText('Resolving data directly in browser (Fallback Mode)...');
-          const weatherUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${coords.lat}&longitude=${coords.lon}&current=us_aqi,european_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone&hourly=us_aqi,european_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone&past_days=30&timezone=auto`;
-          const weatherRes = await fetch(weatherUrl);
+          const weatherUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${coords.lat}&longitude=${coords.lon}&current=us_aqi,european_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone&hourly=us_aqi,european_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone&past_days=30&timezone=auto&_t=${Date.now()}`;
+          const weatherRes = await fetch(weatherUrl, { cache: 'no-store' });
           if (!weatherRes.ok) {
             throw new Error('Unable to contact open-meteo server');
           }
@@ -682,6 +683,30 @@ function App() {
                   ({aqData.latitude.toFixed(4)}°N, {aqData.longitude.toFixed(4)}°E)
                 </span>
               </div>
+              <button
+                className="btn-refresh"
+                onClick={() => {
+                  if (coords) setCoords({ ...coords });
+                }}
+                title="Force refresh live data"
+                style={{
+                  background: 'rgba(168, 85, 247, 0.12)',
+                  border: '1px solid rgba(168, 85, 247, 0.3)',
+                  color: 'var(--neon-purple)',
+                  borderRadius: '8px',
+                  padding: '0.45rem 0.85rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  marginLeft: 'auto',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <RefreshCw size={14} /> Refresh Live Data
+              </button>
             </div>
 
             {/* WHO Health Alert Banner */}

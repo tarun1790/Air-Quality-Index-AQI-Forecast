@@ -42,8 +42,8 @@ class APICache:
         key = (round(lat, 3), round(lon, 3))
         self.cache[key] = (value, time.time())
 
-# Instantiate the cache (1 hour TTL)
-api_cache = APICache(ttl_seconds=3600)
+# Instantiate the cache (5 minutes TTL for fresh data)
+api_cache = APICache(ttl_seconds=300)
 
 async def reverse_geocode_async(lat: float, lon: float) -> str:
     """
@@ -254,15 +254,16 @@ WHO_GUIDELINES = {
 }
 
 @app.get("/api/air-quality")
-async def get_air_quality(lat: float, lon: float):
-    # 1. Check cache first
-    cached_data = api_cache.get(lat, lon)
-    if cached_data is not None:
-        # Return a copy with updated metrics to indicate cache retrieval
-        response_copy = dict(cached_data)
-        response_copy["data_source"] = "In-Memory API Cache"
-        response_copy["model_execution_time_ms"] = 0
-        return response_copy
+async def get_air_quality(lat: float, lon: float, nocache: bool = Query(False)):
+    # 1. Check cache first unless explicitly requested to bypass
+    if not nocache:
+        cached_data = api_cache.get(lat, lon)
+        if cached_data is not None:
+            # Return a copy with updated metrics to indicate cache retrieval
+            response_copy = dict(cached_data)
+            response_copy["data_source"] = "In-Memory API Cache"
+            response_copy["model_execution_time_ms"] = 0
+            return response_copy
 
     # Cache miss - run dynamic pipeline
     start_time = time.time()
