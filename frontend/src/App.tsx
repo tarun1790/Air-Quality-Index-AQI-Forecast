@@ -5,8 +5,10 @@ import { PollutantCard } from './components/PollutantCard';
 import { PrecautionsCard } from './components/PrecautionsCard';
 import { ForecastChart } from './components/ForecastChart';
 import { CityCompare } from './components/CityCompare';
+import { WeatherCard } from './components/WeatherCard';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_KEY || '';
 
 const WHO_LIMITS = {
   pm2_5: 15.0,
@@ -118,6 +120,16 @@ interface AQIDetails {
   };
 }
 
+interface WeatherData {
+  temp: number;
+  humidity: number;
+  wind_speed: number;
+  description: string;
+  icon: string;
+  pressure: number;
+  visibility: number;
+}
+
 interface AirQualityData {
   latitude: number;
   longitude: number;
@@ -127,6 +139,7 @@ interface AirQualityData {
   data_source: string;
   model_execution_time_ms: number;
   correlation_coefficient: number;
+  weather?: WeatherData | null;
   current: {
     time: string;
     aqi: AQIDetails;
@@ -350,6 +363,28 @@ function App() {
             console.warn('Browser geocode query blocked or failed:', geoErr);
           }
           
+          // OpenWeatherMap Browser fallback fetch using user's key
+          let openWeatherPayload = null;
+          if (OPENWEATHER_API_KEY) {
+            try {
+              const wRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${coords.lat}&lon=${coords.lon}&appid=${OPENWEATHER_API_KEY}&units=metric`);
+              if (wRes.ok) {
+                const wJson = await wRes.json();
+                openWeatherPayload = {
+                  temp: wJson.main?.temp || 0.0,
+                  humidity: wJson.main?.humidity || 0,
+                  wind_speed: wJson.wind?.speed || 0.0,
+                  description: wJson.weather?.[0]?.description || "N/A",
+                  icon: wJson.weather?.[0]?.icon || "01d",
+                  pressure: wJson.main?.pressure || 1013,
+                  visibility: wJson.visibility || 10000
+                };
+              }
+            } catch (wErr) {
+              console.warn('Browser weather fallback fetch failed:', wErr);
+            }
+          }
+          
           const fallbackPayload: AirQualityData = {
             latitude: coords.lat,
             longitude: coords.lon,
@@ -359,6 +394,7 @@ function App() {
             data_source: "Dynamic Local Fallback (Browser)",
             model_execution_time_ms: 12,
             correlation_coefficient: correlation,
+            weather: openWeatherPayload,
             current: {
               time: currentData.time,
               aqi: aqiDetails as any,
@@ -680,6 +716,7 @@ function App() {
               {/* Left Column: Current AQI Gauge */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <AQIGauge aqi={aqData.current.aqi} />
+                {aqData.weather && <WeatherCard weather={aqData.weather} />}
               </div>
 
               {/* Right Column: Detailed Breakdown & Charts */}

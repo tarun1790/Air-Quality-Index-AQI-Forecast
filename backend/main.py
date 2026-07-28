@@ -65,6 +65,37 @@ async def reverse_geocode_async(lat: float, lon: float) -> str:
         print(f"[Reverse Geocode Warning] Nominatim query failed: {e}")
     return None
 
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+
+async def fetch_weather_async(lat: float, lon: float) -> dict:
+    """
+    Asynchronously queries OpenWeatherMap for current weather metrics using coordinates.
+    """
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    params = {
+        "lat": lat,
+        "lon": lon,
+        "appid": OPENWEATHER_API_KEY,
+        "units": "metric"
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=3.0)
+            if response.status_code == 200:
+                w_data = response.json()
+                return {
+                    "temp": w_data.get("main", {}).get("temp", 0.0),
+                    "humidity": w_data.get("main", {}).get("humidity", 0),
+                    "wind_speed": w_data.get("wind", {}).get("speed", 0.0),
+                    "description": w_data.get("weather", [{}])[0].get("description", "N/A"),
+                    "icon": w_data.get("weather", [{}])[0].get("icon", "01d"),
+                    "pressure": w_data.get("main", {}).get("pressure", 1013),
+                    "visibility": w_data.get("visibility", 10000)
+                }
+    except Exception as e:
+        print(f"[Weather API Warning] OpenWeatherMap request failed: {e}")
+    return None
+
 # Constants for AQI categories and advice
 def get_aqi_details(aqi: float):
     aqi_val = int(round(aqi))
@@ -186,6 +217,9 @@ async def get_air_quality(lat: float, lon: float):
     # 2. Async call reverse geocoding to resolve nearby town/suburb name
     resolved_addr = await reverse_geocode_async(lat, lon)
     
+    # Fetch weather data asynchronously from OpenWeatherMap using user's key
+    weather_data = await fetch_weather_async(lat, lon)
+    
     # 3. Async call Open-Meteo Air Quality API
     url = f"https://air-quality-api.open-meteo.com/v1/air-quality"
     params = {
@@ -298,6 +332,7 @@ async def get_air_quality(lat: float, lon: float):
         "data_source": source_name,
         "model_execution_time_ms": duration_ms,
         "correlation_coefficient": round(correlation, 4),
+        "weather": weather_data,
         "current": {
             "time": current.get("time"),
             "aqi": current_aqi_details,
