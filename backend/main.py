@@ -6,6 +6,9 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 from model import train_and_forecast_aqi
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="Purple AQI Forecast API")
 
