@@ -372,7 +372,7 @@ function App() {
           setCityName(resolvedAddress);
         } catch (fallbackErr: any) {
           console.error('Fallback execution failed:', fallbackErr);
-          setError('Could not load AQI data. Both local backend and Open-Meteo services are offline.');
+          setError('Could not load AQI data. Fallback failed: ' + (fallbackErr.message || fallbackErr));
         }
       } finally {
         setLoading(false);
