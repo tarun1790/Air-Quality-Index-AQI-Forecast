@@ -384,6 +384,42 @@ function App() {
               console.warn('Browser weather fallback fetch failed:', wErr);
             }
           }
+
+          // Open-Meteo Weather fallback if OpenWeatherMap key is invalid or offline
+          if (!openWeatherPayload) {
+            try {
+              const oRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure,visibility,weather_code&timezone=auto`);
+              if (oRes.ok) {
+                const oJson = await oRes.json();
+                const current = oJson.current || {};
+                const wCode = current.weather_code || 0;
+                
+                // Map WMO weather codes to OWM equivalent descriptions and icons
+                let description = "Cloudy";
+                let icon = "03d";
+                if (wCode === 0) { description = "Clear Sky"; icon = "01d"; }
+                else if (wCode >= 1 && wCode <= 3) { description = "Partly Cloudy"; icon = "03d"; }
+                else if (wCode === 45 || wCode === 48) { description = "Foggy"; icon = "50d"; }
+                else if (wCode >= 51 && wCode <= 57) { description = "Drizzle"; icon = "09d"; }
+                else if (wCode >= 61 && wCode <= 67) { description = "Rainy"; icon = "10d"; }
+                else if (wCode >= 71 && wCode <= 77) { description = "Snowy"; icon = "13d"; }
+                else if (wCode >= 80 && wCode <= 82) { description = "Rain Showers"; icon = "09d"; }
+                else if (wCode === 95 || wCode === 96 || wCode === 99) { description = "Thunderstorm"; icon = "11d"; }
+                
+                openWeatherPayload = {
+                  temp: current.temperature_2m || 0.0,
+                  humidity: current.relative_humidity_2m || 0,
+                  wind_speed: (current.wind_speed_10m || 0.0) / 3.6, // convert km/h to m/s
+                  description: description,
+                  icon: icon,
+                  pressure: current.surface_pressure || 1013,
+                  visibility: current.visibility || 10000
+                };
+              }
+            } catch (oErr) {
+              console.warn('Browser keyless weather fallback fetch failed:', oErr);
+            }
+          }
           
           const fallbackPayload: AirQualityData = {
             latitude: coords.lat,

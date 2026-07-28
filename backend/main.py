@@ -70,34 +70,84 @@ async def reverse_geocode_async(lat: float, lon: float) -> str:
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-async def fetch_weather_async(lat: float, lon: float) -> dict:
+def map_wmo_code(code: int):
+    # Maps WMO weather code to OpenWeatherMap icon and description
+    if code == 0: return "Clear Sky", "01d"
+    elif code in [1, 2, 3]: return "Partly Cloudy", "03d"
+    elif code in [45, 48]: return "Foggy", "50d"
+    elif code in [51, 53, 55, 56, 57]: return "Drizzle", "09d"
+    elif code in [61, 63, 65, 66, 67]: return "Rainy", "10d"
+    elif code in [71, 73, 75, 77]: return "Snowy", "13d"
+    elif code in [80, 81, 82]: return "Rain Showers", "09d"
+    elif code in [85, 86]: return "Snow Showers", "13d"
+    elif code in [95, 96, 99]: return "Thunderstorm", "11d"
+    return "Cloudy", "03d"
+
+async def fetch_weather_fallback_async(lat: float, lon: float) -> dict:
     """
-    Asynchronously queries OpenWeatherMap for current weather metrics using coordinates.
+    Asynchronously queries keyless Open-Meteo Forecast API for weather fallback metrics.
     """
-    url = "https://api.openweathermap.org/data/2.5/weather"
+    url = "https://api.open-meteo.com/v1/forecast"
     params = {
-        "lat": lat,
-        "lon": lon,
-        "appid": OPENWEATHER_API_KEY,
-        "units": "metric"
+        "latitude": lat,
+        "longitude": lon,
+        "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure,visibility,weather_code",
+        "timezone": "auto"
     }
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(url, params=params, timeout=3.0)
             if response.status_code == 200:
-                w_data = response.json()
+                data = response.json().get("current", {})
+                w_code = data.get("weather_code", 0)
+                desc, icon = map_wmo_code(w_code)
                 return {
-                    "temp": w_data.get("main", {}).get("temp", 0.0),
-                    "humidity": w_data.get("main", {}).get("humidity", 0),
-                    "wind_speed": w_data.get("wind", {}).get("speed", 0.0),
-                    "description": w_data.get("weather", [{}])[0].get("description", "N/A"),
-                    "icon": w_data.get("weather", [{}])[0].get("icon", "01d"),
-                    "pressure": w_data.get("main", {}).get("pressure", 1013),
-                    "visibility": w_data.get("visibility", 10000)
+                    "temp": data.get("temperature_2m", 0.0),
+                    "humidity": data.get("relative_humidity_2m", 0),
+                    "wind_speed": data.get("wind_speed_10m", 0.0) / 3.6, # Convert km/h to m/s to match OpenWeatherMap
+                    "description": desc,
+                    "icon": icon,
+                    "pressure": data.get("surface_pressure", 1013),
+                    "visibility": data.get("visibility", 10000)
                 }
     except Exception as e:
-        print(f"[Weather API Warning] OpenWeatherMap request failed: {e}")
+        print(f"[Weather Fallback Warning] Open-Meteo forecast failed: {e}")
     return None
+
+async def fetch_weather_async(lat: float, lon: float) -> dict:
+    """
+    Asynchronously queries OpenWeatherMap for current weather metrics.
+    Falls back to keyless Open-Meteo Forecast API if OpenWeatherMap key is invalid (401) or fails.
+    """
+    if OPENWEATHER_API_KEY:
+        url = "https://api.openweathermap.org/data/2.5/weather"
+        params = {
+            "lat": lat,
+            "lon": lon,
+            "appid": OPENWEATHER_API_KEY,
+            "units": "metric"
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=3.0)
+                if response.status_code == 200:
+                    w_data = response.json()
+                    return {
+                        "temp": w_data.get("main", {}).get("temp", 0.0),
+                        "humidity": w_data.get("main", {}).get("humidity", 0),
+                        "wind_speed": w_data.get("wind", {}).get("speed", 0.0),
+                        "description": w_data.get("weather", [{}])[0].get("description", "N/A"),
+                        "icon": w_data.get("weather", [{}])[0].get("icon", "01d"),
+                        "pressure": w_data.get("main", {}).get("pressure", 1013),
+                        "visibility": w_data.get("visibility", 10000)
+                    }
+                else:
+                    print(f"[Weather API Warning] OpenWeatherMap returned {response.status_code}. Using keyless Open-Meteo fallback.")
+        except Exception as e:
+            print(f"[Weather API Warning] OpenWeatherMap request failed: {e}. Using keyless Open-Meteo fallback.")
+            
+    # Fallback to keyless Open-Meteo
+    return await fetch_weather_fallback_async(lat, lon)
 
 # Constants for AQI categories and advice
 def get_aqi_details(aqi: float):
