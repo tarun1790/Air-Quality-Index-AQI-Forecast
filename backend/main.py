@@ -2,13 +2,16 @@ import os
 import time
 import torch
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 from model import train_and_forecast_aqi
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+from database import init_db, get_db, FavoriteCity, SearchLog
 
 load_dotenv()
+init_db()
 
 app = FastAPI(title="Purple AQI Forecast API")
 
@@ -259,7 +262,7 @@ WHO_GUIDELINES = {
 }
 
 @app.get("/api/air-quality")
-async def get_air_quality(lat: float, lon: float, nocache: bool = Query(False)):
+async def get_air_quality(lat: float, lon: float, nocache: bool = Query(False), db: Session = Depends(get_db)):
     # 1. Check cache first unless explicitly requested to bypass
     if not nocache:
         cached_data = api_cache.get(lat, lon)
@@ -403,6 +406,21 @@ async def get_air_quality(lat: float, lon: float, nocache: bool = Query(False)):
     
     # Cache the payload
     api_cache.set(lat, lon, payload)
+
+    # Persist query in database
+    try:
+        log_entry = SearchLog(
+            city_name=resolved_address or f"{round(lat, 2)}°N, {round(lon, 2)}°E",
+            latitude=lat,
+            longitude=lon,
+            aqi=current_us_aqi,
+            weather_desc=weather_data.get("description") if weather_data else None,
+            temp=weather_data.get("temp") if weather_data else None
+        )
+        db.add(log_entry)
+        db.commit()
+    except Exception as db_err:
+        print(f"[DB Log Warning] Failed to log search into database: {db_err}")
     
     return payload
 
@@ -482,3 +500,49 @@ async def compare_cities(coords: str = Query(..., description="Format: lat,lon,n
                 continue
                 
     return cities_data
+
+# --- Database Endpoints (Favorites & Search History) ---
+
+@app.get("/api/favorites")
+def get_favorites(db: Session = Depends(get_db)):
+    """Returns all bookmarked favorite cities from the database."""
+    favorites = db.query(FavoriteCity).order_by(FavoriteCity.created_at.desc()).all()
+    return [{"id": f.id, "name": f.name, "latitude": f.latitude, "longitude": f.longitude, "created_at": f.created_at.isoformat()} for f in favorites]
+
+@app.post("/api/favorites")
+def add_favorite(name: str = Query(...), lat: float = Query(...), lon: float = Query(...), db: Session = Depends(get_db)):
+    """Saves a city to the database favorites table."""
+    existing = db.query(FavoriteCity).filter(FavoriteCity.name == name).first()
+    if existing:
+        return {"status": "already_exists", "id": existing.id}
+    fav = FavoriteCity(name=name, latitude=lat, longitude=lon)
+    db.add(fav)
+    db.commit()
+    db.refresh(fav)
+    return {"status": "created", "id": fav.id, "name": fav.name}
+
+@app.delete("/api/favorites/{fav_id}")
+def delete_favorite(fav_id: int, db: Session = Depends(get_db)):
+    """Removes a city from database favorites."""
+    fav = db.query(FavoriteCity).filter(FavoriteCity.id == fav_id).first()
+    if not fav:
+        raise HTTPException(status_code=404, detail="Favorite not found")
+    db.delete(fav)
+    db.commit()
+    return {"status": "deleted", "id": fav_id}
+
+@app.get("/api/search-history")
+def get_search_history(limit: int = 10, db: Session = Depends(get_db)):
+    """Retrieves recent search queries logged into the database."""
+    history = db.query(SearchLog).order_by(SearchLog.created_at.desc()).limit(limit).all()
+    return [{
+        "id": h.id,
+        "city_name": h.city_name,
+        "latitude": h.latitude,
+        "longitude": h.longitude,
+        "aqi": h.aqi,
+        "weather_desc": h.weather_desc,
+        "temp": h.temp,
+        "timestamp": h.created_at.isoformat()
+    } for h in history]
+
