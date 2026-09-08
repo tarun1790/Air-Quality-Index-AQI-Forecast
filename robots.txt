@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tarun1790.github.io/Air-Quality-Index-AQI-Forecast/sitemap.xml
