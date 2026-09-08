@@ -773,30 +773,34 @@ function App() {
               </div>
             </div>
 
-            <div className="main-grid">
-              {/* Left Column: Current AQI Gauge */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <AQIGauge aqi={aqData.current.aqi} />
-                {aqData.weather && <WeatherCard weather={aqData.weather} />}
-              </div>
-
-              {/* Right Column: Detailed Breakdown & Charts */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {/* Pollutants grid */}
-                <div className="pollutants-container">
-                  <div className="pollutants-header">
-                    <h3>Pollutant Breakdown</h3>
-                  </div>
-                  <div className="pollutants-grid">
-                    {Object.entries(aqData.current.pollutants).map(([key, data]) => (
-                      <PollutantCard key={key} pollutantKey={key} data={data} />
-                    ))}
-                  </div>
+            {/* Top Atmospheric Overview Grid: AQI Gauge & Comprehensive Weather Analysis */}
+            <div className="main-grid" style={{ marginBottom: '1.5rem', alignItems: 'stretch' }}>
+              <AQIGauge aqi={aqData.current.aqi} />
+              {aqData.weather ? (
+                <WeatherCard weather={aqData.weather} aqiLevel={aqData.current.aqi.level} />
+              ) : (
+                <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Retrieving live atmospheric telemetry...</span>
                 </div>
+              )}
+            </div>
 
-                {/* Health precautions */}
-                <PrecautionsCard precautions={aqData.current.aqi.precautions} />
+            {/* Middle Row: Detailed Pollutant Breakdown & Health Precautions */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem', alignItems: 'start' }}>
+              {/* Pollutants grid */}
+              <div className="pollutants-container">
+                <div className="pollutants-header">
+                  <h3>Pollutant Breakdown</h3>
+                </div>
+                <div className="pollutants-grid">
+                  {Object.entries(aqData.current.pollutants).map(([key, data]) => (
+                    <PollutantCard key={key} pollutantKey={key} data={data} />
+                  ))}
+                </div>
               </div>
+
+              {/* Health precautions */}
+              <PrecautionsCard precautions={aqData.current.aqi.precautions} />
             </div>
 
             {/* Bottom Analytics: Chart Comparison */}
