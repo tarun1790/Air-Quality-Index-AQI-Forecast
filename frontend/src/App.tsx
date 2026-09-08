@@ -7,7 +7,7 @@ import { ForecastChart } from './components/ForecastChart';
 import { CityCompare } from './components/CityCompare';
 import { WeatherCard } from './components/WeatherCard';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '');
 const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_KEY || '';
 
 const WHO_LIMITS = {
