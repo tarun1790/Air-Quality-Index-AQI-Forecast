@@ -21,6 +21,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "service": "purple-aqi-api", "timestamp": time.time()}
+
 # In-Memory Cache Manager
 class APICache:
     def __init__(self, ttl_seconds=3600):
